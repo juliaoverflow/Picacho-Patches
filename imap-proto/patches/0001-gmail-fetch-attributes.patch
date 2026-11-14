@@ -1,0 +1,92 @@
+Parse Gmail's X-GM-MSGID and X-GM-LABELS FETCH attributes.
+
+diff --git b/src/parser/gmail.rs b/src/parser/gmail.rs
+new file mode 100644
+index 0000000..79ded79
+--- /dev/null
++++ b/src/parser/gmail.rs
+@@ -0,0 +1,29 @@
++//! Gmail IMAP extensions (X-GM-EXT-1). Picacho patch; not part of upstream 0.10.
++//!
++//! https://developers.google.com/gmail/imap/imap-extensions
++
++// rustfmt doesn't do a very good job on nom parser invocations.
++#![cfg_attr(rustfmt, rustfmt_skip)]
++
++use crate::core::{atom_char, astring_utf8, number_64};
++use crate::types::*;
++
++// A message's permanent identifier, shared by every label it appears under.
++named!(pub (crate) msg_att_gmail_msgid<AttributeValue>, do_parse!(
++    tag_no_case!("X-GM-MSGID ") >>
++    num: number_64 >>
++    (AttributeValue::GmailMsgId(num))
++));
++
++// A system label (`\\Inbox`, `\\Important`) or a label name.
++named!(gmail_label<&str>, alt!(
++    map_res!(recognize!(pair!(tag!("\\"), take_while!(atom_char))), std::str::from_utf8) |
++    astring_utf8
++));
++
++// The labels on a message, like folders it is in.
++named!(pub (crate) msg_att_gmail_labels<AttributeValue>, do_parse!(
++    tag_no_case!("X-GM-LABELS ") >>
++    labels: parenthesized_list!(gmail_label) >>
++    (AttributeValue::GmailLabels(labels))
++));
+diff --git a/src/parser/mod.rs b/src/parser/mod.rs
+index fbfb14a..8fd0a24 100644
+--- a/src/parser/mod.rs
++++ b/src/parser/mod.rs
+@@ -1,6 +1,7 @@
+ pub use self::rfc3501::*;
+ pub use self::rfc5464::*;
+ 
++mod gmail;
+ mod rfc3501;
+ mod rfc4551;
+ mod rfc5464;
+diff --git a/src/parser/rfc3501.rs b/src/parser/rfc3501.rs
+index 63ceff2..48924cb 100644
+--- a/src/parser/rfc3501.rs
++++ b/src/parser/rfc3501.rs
+@@ -11,7 +11,7 @@ use nom::IResult;
+ 
+ use std::str;
+ 
+-use crate::parser::rfc4551;
++use crate::parser::{gmail, rfc4551};
+ use crate::parser::rfc5464::resp_metadata;
+ use crate::types::*;
+ use crate::core::*;
+@@ -423,6 +423,8 @@ named!(msg_att<AttributeValue>, alt!(
+     msg_att_internal_date |
+     msg_att_flags |
+     rfc4551::msg_att_mod_seq |
++    gmail::msg_att_gmail_msgid |
++    gmail::msg_att_gmail_labels |
+     msg_att_rfc822 |
+     msg_att_rfc822_header |
+     msg_att_rfc822_size |
+@@ -506,6 +508,7 @@ named!(resp_cond<Response>, do_parse!(
+     })
+ ));
+ 
++
+ named!(response_data<Response>, do_parse!(
+     tag!("* ") >>
+     contents: alt!(
+diff --git a/src/types.rs b/src/types.rs
+index 6ca930b..ef7ff8d 100644
+--- a/src/types.rs
++++ b/src/types.rs
+@@ -145,6 +145,8 @@ pub enum AttributeValue<'a> {
+     Flags(Vec<&'a str>),
+     InternalDate(&'a str),
+     ModSeq(u64), // RFC 4551, section 3.3.2
++    GmailMsgId(u64), // Gmail X-GM-EXT-1 (Picacho patch)
++    GmailLabels(Vec<&'a str>), // Gmail X-GM-EXT-1 (Picacho patch)
+     Rfc822(Option<&'a [u8]>),
+     Rfc822Header(Option<&'a [u8]>),
+     Rfc822Size(u32),

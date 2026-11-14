@@ -1,0 +1,26 @@
+Resolve an address that can't be resolved against the document's base URL to about:invalid instead of panicking.
+
+diff --git a/src/document.rs b/src/document.rs
+index 96d7ed0..e41dc0c 100644
+--- a/src/document.rs
++++ b/src/document.rs
+@@ -1094,13 +1094,13 @@ impl BaseDocument {
+         node
+     }
+ 
++    /// Picacho patch: an address that can't be resolved (any relative one
++    /// against `about:blank`, or a malformed one) points nowhere instead of
++    /// panicking, so an email's markup can't stop it from being shown.
+     pub(crate) fn resolve_url(&self, raw: &str) -> url::Url {
+-        self.url.resolve_relative(raw).unwrap_or_else(|| {
+-            panic!(
+-                "to be able to resolve {raw} with the base_url: {:?}",
+-                *self.url
+-            )
+-        })
++        self.url
++            .resolve_relative(raw)
++            .unwrap_or_else(|| url::Url::parse("about:invalid").expect("a valid URL"))
+     }
+ 
+     pub fn print_tree(&self) {

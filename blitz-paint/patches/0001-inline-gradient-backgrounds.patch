@@ -1,0 +1,134 @@
+Paint an inline box's gradient background layers over its background color, and give a table row or row group a one-color gradient's color.
+
+diff --git a/src/render/background.rs b/src/render/background.rs
+index e5e048e..65b72f6 100644
+--- a/src/render/background.rs
++++ b/src/render/background.rs
+@@ -236,6 +236,12 @@ impl ElementCx<'_, '_> {
+             let node = self.context.dom.get_node(node_id)?;
+             let style = node.primary_styles()?;
+             let current_color = style.clone_color();
++            // A gradient of one opaque color on top paints just that color.
++            // Emails' dark styles set `background: linear-gradient(c, c)` on
++            // rows whose light `background-color` comes from a later rule.
++            if let Some(color) = solid_gradient_color(&style, &current_color) {
++                return Some(color);
++            }
+             let color = style
+                 .get_background()
+                 .background_color
+@@ -966,3 +972,32 @@ fn extend(offset: f64, length: f64) -> f64 {
+         -extend_length
+     }
+ }
++
++/// The color of the topmost background layer when it is a linear or radial
++/// gradient of a single opaque color (as in `linear-gradient(c, c)`), which
++/// paints exactly that color over everything below it.
++fn solid_gradient_color(
++    style: &style::properties::ComputedValues,
++    current_color: &style::color::AbsoluteColor,
++) -> Option<Color> {
++    use style::values::generics::image::{GenericGradient, GenericGradientItem};
++    let top = style.get_background().background_image.0.first()?;
++    let GenericImage::Gradient(gradient) = top else {
++        return None;
++    };
++    let colors: Vec<Color> = match &**gradient {
++        GenericGradient::Linear { items, .. } | GenericGradient::Radial { items, .. } => items
++            .iter()
++            .filter_map(|item| match item {
++                GenericGradientItem::SimpleColorStop(color)
++                | GenericGradientItem::ComplexColorStop { color, .. } => {
++                    Some(color.resolve_to_absolute(current_color).as_srgb_color())
++                }
++                GenericGradientItem::InterpolationHint(_) => None,
++            })
++            .collect(),
++        GenericGradient::Conic { .. } => return None,
++    };
++    let first = *colors.first()?;
++    (first.components[3] >= 1.0 && colors.iter().all(|c| *c == first)).then_some(first)
++}
+diff --git a/src/text.rs b/src/text.rs
+index 8887f03..cf9917c 100644
+--- a/src/text.rs
++++ b/src/text.rs
+@@ -8,6 +8,7 @@ use style::properties::generated::longhands::text_decoration_style::computed_val
+ use style::values::computed::{
+     Length, LengthPercentage, TextDecorationLength, TextDecorationLine, TextUnderlinePosition,
+ };
++use style::values::generics::image::GenericImage;
+ use style::values::generics::text::{GenericTextDecorationInset, GenericTextDecorationLength};
+ 
+ use crate::color::{Color, ToColorColor as _};
+@@ -45,12 +46,24 @@ pub(crate) fn draw_inline_backgrounds<'a>(
+             };
+ 
+             let current_color = styles.clone_color();
+-            let bg_color = styles
+-                .get_background()
++            let background = styles.get_background();
++            let bg_color = background
+                 .background_color
+                 .resolve_to_absolute(&current_color)
+                 .as_srgb_color();
+-            if bg_color == Color::TRANSPARENT {
++            // Gradients are painted too: emails' dark styles commonly set
++            // `background: linear-gradient(c, c)`, which paints over a light
++            // `background-color` a later rule gives the same element.
++            let gradients: Vec<_> = background
++                .background_image
++                .0
++                .iter()
++                .filter_map(|image| match image {
++                    GenericImage::Gradient(gradient) => Some(gradient),
++                    _ => None,
++                })
++                .collect();
++            if bg_color == Color::TRANSPARENT && gradients.is_empty() {
+                 continue;
+             }
+ 
+@@ -62,7 +75,40 @@ pub(crate) fn draw_inline_backgrounds<'a>(
+             let y1 = baseline + metrics.descent as f64;
+             let rect = Rect::new(x, y0, x + w, y1);
+ 
+-            scene.fill(Fill::NonZero, transform, bg_color, None, &rect);
++            // The first layer is on top, so paint from the last.
++            let gradients: Vec<_> = gradients
++                .into_iter()
++                .rev()
++                .map(|gradient| {
++                    crate::gradient::to_peniko_gradient(
++                        gradient,
++                        rect,
++                        rect,
++                        doc.viewport().scale_f64(),
++                        &current_color,
++                    )
++                })
++                .collect();
++            // An opaque gradient hides the color: painting it anyway would
++            // leave its antialiased edge as a hairline around the box.
++            let covered = gradients.iter().any(|(gradient, _)| {
++                gradient
++                    .stops
++                    .iter()
++                    .all(|stop| stop.color.to_alpha_color::<color::Srgb>().components[3] >= 1.0)
++            });
++            if bg_color != Color::TRANSPARENT && !covered {
++                scene.fill(Fill::NonZero, transform, bg_color, None, &rect);
++            }
++            for (gradient, gradient_transform) in &gradients {
++                scene.fill(
++                    Fill::NonZero,
++                    transform,
++                    anyrender::Paint::Gradient(gradient),
++                    *gradient_transform,
++                    &rect,
++                );
++            }
+         }
+     }
+ }

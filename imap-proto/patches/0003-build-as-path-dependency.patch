@@ -1,0 +1,42 @@
+Build without --cap-lints: drop trailing semicolons in three macro arms used in expression position, and allow warnings.
+
+diff --git a/src/lib.rs b/src/lib.rs
+index 0ea661a..8de2f43 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,3 +1,4 @@
++#![allow(warnings)] // Vendored upstream source; see README.md.
+ #[macro_use]
+ extern crate nom;
+ 
+diff --git a/src/macros.rs b/src/macros.rs
+index 83e7b9f..e650dab 100644
+--- a/src/macros.rs
++++ b/src/macros.rs
+@@ -3,7 +3,7 @@ macro_rules! paren_delimited (
+         delimited!($i, char!('('), $submac!($($args)*), char!(')'))
+     });
+     ($i:expr, $f:expr) => (
+-        paren_delimited!($i, call!($f));
++        paren_delimited!($i, call!($f))
+     );
+ );
+ 
+@@ -12,7 +12,7 @@ macro_rules! parenthesized_list (
+         paren_delimited!($i, separated_list!(char!(' '), $submac!($($args)*)))
+     });
+     ($i:expr, $f:expr) => (
+-        parenthesized_list!($i, call!($f));
++        parenthesized_list!($i, call!($f))
+     );
+ );
+ 
+@@ -21,7 +21,7 @@ macro_rules! parenthesized_nonempty_list (
+         paren_delimited!($i, separated_nonempty_list!(char!(' '), $submac!($($args)*)))
+     });
+     ($i:expr, $f:expr) => (
+-        parenthesized_nonempty_list!($i, call!($f));
++        parenthesized_nonempty_list!($i, call!($f))
+     );
+ );
+ 

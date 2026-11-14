@@ -1,0 +1,56 @@
+Keep untagged NAMESPACE, QUOTA, QUOTAROOT, MYRIGHTS, LISTRIGHTS, ACL, ID and ENABLED data as Response::Other text instead of failing to parse it.
+
+diff --git a/src/parser/rfc3501.rs b/src/parser/rfc3501.rs
+index 48924cb..442cc9b 100644
+--- a/src/parser/rfc3501.rs
++++ b/src/parser/rfc3501.rs
+@@ -508,6 +508,26 @@ named!(resp_cond<Response>, do_parse!(
+     })
+ ));
+ 
++// Untagged data from extensions this parser doesn't model (Picacho patch):
++// NAMESPACE (RFC 2342), QUOTA/QUOTAROOT (RFC 9208), MYRIGHTS/ACL (RFC 4314),
++// ID (RFC 2971) and ENABLED (RFC 5161). The line is kept as text for the
++// client to read; without this, `imap` treats it as the server hanging up.
++named!(resp_other<Response>, map_res!(
++    recognize!(pair!(
++        alt!(
++            tag_no_case!("NAMESPACE") |
++            tag_no_case!("QUOTAROOT") |
++            tag_no_case!("QUOTA") |
++            tag_no_case!("MYRIGHTS") |
++            tag_no_case!("LISTRIGHTS") |
++            tag_no_case!("ACL") |
++            tag_no_case!("ID") |
++            tag_no_case!("ENABLED")
++        ),
++        text
++    )),
++    |line| str::from_utf8(line).map(Response::Other)
++));
+ 
+ named!(response_data<Response>, do_parse!(
+     tag!("* ") >>
+@@ -517,7 +537,8 @@ named!(response_data<Response>, do_parse!(
+         message_data_expunge |
+         message_data_fetch |
+         resp_capability |
+-        resp_metadata
++        resp_metadata |
++        resp_other
+     ) >>
+     tag!("\r\n") >>
+     (contents)
+diff --git a/src/types.rs b/src/types.rs
+index ef7ff8d..a0f3df2 100644
+--- a/src/types.rs
++++ b/src/types.rs
+@@ -32,6 +32,8 @@ pub enum Response<'a> {
+     Fetch(u32, Vec<AttributeValue<'a>>),
+     MailboxData(MailboxDatum<'a>),
+     IDs(Vec<u32>),
++    /// An extension's untagged data, as text (Picacho patch; see `resp_other`).
++    Other(&'a str),
+ }
+ 
+ #[derive(Debug, Eq, PartialEq)]
