@@ -149,6 +149,21 @@ pub enum AttributeValue<'a> {
     ModSeq(u64), // RFC 4551, section 3.3.2
     GmailMsgId(u64), // Gmail X-GM-EXT-1 (Picacho patch)
     GmailLabels(Vec<&'a str>), // Gmail X-GM-EXT-1 (Picacho patch)
+    GmailThrId(u64), // Gmail X-GM-EXT-1 (Picacho patch 0004)
+    EmailId(&'a str), // RFC 8474 (Picacho patch 0004)
+    ThreadId(Option<&'a str>), // RFC 8474 (Picacho patch 0004)
+    Preview(Option<&'a [u8]>), // RFC 8970 (Picacho patch 0004)
+    SaveDate(Option<&'a str>), // RFC 8514 (Picacho patch 0004)
+    /// RFC 3516 (Picacho patch 0004): a part, decoded by the server.
+    Binary {
+        section: Vec<u32>,
+        index: Option<u32>,
+        data: Option<&'a [u8]>,
+    },
+    BinarySize {
+        section: Vec<u32>,
+        size: u32,
+    },
     Rfc822(Option<&'a [u8]>),
     Rfc822Header(Option<&'a [u8]>),
     Rfc822Size(u32),

@@ -11,7 +11,7 @@ use nom::IResult;
 
 use std::str;
 
-use crate::parser::{gmail, rfc4551};
+use crate::parser::{extensions, gmail, rfc4551};
 use crate::parser::rfc5464::resp_metadata;
 use crate::types::*;
 use crate::core::*;
@@ -425,6 +425,13 @@ named!(msg_att<AttributeValue>, alt!(
     rfc4551::msg_att_mod_seq |
     gmail::msg_att_gmail_msgid |
     gmail::msg_att_gmail_labels |
+    extensions::msg_att_gmail_thrid |
+    extensions::msg_att_email_id |
+    extensions::msg_att_thread_id |
+    extensions::msg_att_preview |
+    extensions::msg_att_save_date |
+    extensions::msg_att_binary_size |
+    extensions::msg_att_binary |
     msg_att_rfc822 |
     msg_att_rfc822_header |
     msg_att_rfc822_size |
@@ -515,6 +522,12 @@ named!(resp_cond<Response>, do_parse!(
 named!(resp_other<Response>, map_res!(
     recognize!(pair!(
         alt!(
+            // Picacho patch 0004: ESEARCH (RFC 4731), SORT and THREAD
+            // (RFC 5256), and QRESYNC's VANISHED (EARLIER) (RFC 7162).
+            tag_no_case!("ESEARCH") |
+            tag_no_case!("SORT") |
+            tag_no_case!("THREAD") |
+            tag_no_case!("VANISHED") |
             tag_no_case!("NAMESPACE") |
             tag_no_case!("QUOTAROOT") |
             tag_no_case!("QUOTA") |
@@ -538,6 +551,7 @@ named!(response_data<Response>, do_parse!(
         message_data_fetch |
         resp_capability |
         resp_metadata |
+        extensions::resp_vanished_now |
         resp_other
     ) >>
     tag!("\r\n") >>
