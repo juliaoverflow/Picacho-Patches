@@ -30,6 +30,21 @@ Two mechanical fixes that the registry build hides with `--cap-lints`: three
 `src/macros.rs` arms drop a trailing semicolon in expression position, and
 `src/lib.rs` allows warnings.
 
+### 0004 Extension data
+
+`src/parser/extensions.rs`:
+
+- FETCH attributes: Gmail's `X-GM-THRID`, OBJECTID's `EMAILID` and
+  `THREADID` (RFC 8474), `PREVIEW` (RFC 8970), `SAVEDATE` (RFC 8514), and
+  BINARY's `BINARY[…]` and `BINARY.SIZE[…]` (RFC 3516), as new
+  `AttributeValue` variants.
+- Untagged `ESEARCH`, `SORT`, `THREAD` and `VANISHED (EARLIER)` are kept as
+  `Response::Other` text.
+- An unsolicited `VANISHED` (QRESYNC, RFC 7162) is reported as
+  `Response::Expunge(0)`: `imap` 2.4 passes expunges on as unilateral data,
+  where any other unknown response would end the command as if the server
+  had hung up. Sequence number 0 never names a message.
+
 Remove these patches when Picacho moves to an `imap`/`imap-proto` release that
 parses this data.
 
