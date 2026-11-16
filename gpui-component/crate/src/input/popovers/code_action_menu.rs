@@ -1,28 +1,25 @@
 use std::rc::Rc;
 
 use gpui::{
-    Action, AnyElement, App, AppContext, Bounds, Context, DismissEvent, Empty, Entity,
-    EventEmitter, InteractiveElement as _, IntoElement, ParentElement, Pixels, Point, Render,
-    RenderOnce, SharedString, Styled, StyledText, Subscription, Window, canvas, deferred, div,
-    prelude::FluentBuilder, px, relative,
+    Action, AnyElement, App, AppContext, Context, DismissEvent, Empty, Entity, EventEmitter,
+    Half as _, InteractiveElement as _, IntoElement, ParentElement, Pixels, Render, RenderOnce,
+    Styled, StyledText, Subscription, WeakEntity, Window, deferred, div, prelude::FluentBuilder,
+    px, relative,
 };
-use lsp_types::CodeAction;
+use gpui_base::TestSupportExt as _;
+pub(crate) use gpui_base::input::CodeActionItem;
 
 const MAX_MENU_WIDTH: Pixels = px(320.);
 const MAX_MENU_HEIGHT: Pixels = px(480.);
 
 use crate::{
     ActiveTheme, IndexPath, Selectable, actions, h_flex,
-    input::{self, InputState, popovers::editor_popover},
+    input::{
+        self, EditorState,
+        popovers::{CaretAnchoredPopup, editor_popover},
+    },
     list::{List, ListDelegate, ListEvent, ListState},
 };
-
-#[derive(Debug, Clone)]
-pub(crate) struct CodeActionItem {
-    /// The `id` of the `CodeActionProvider` that provided this item.
-    pub(crate) provider_id: SharedString,
-    pub(crate) action: CodeAction,
-}
 
 struct MenuDelegate {
     menu: Entity<CodeActionMenu>,
@@ -87,10 +84,10 @@ impl RenderOnce for MenuItem {
             .p_1()
             .text_xs()
             .line_height(relative(1.))
-            .rounded_sm()
+            .rounded(cx.theme().radius.half())
             .hover(|this| this.bg(cx.theme().accent.opacity(0.8)))
             .when(self.selected, |this| {
-                this.bg(cx.theme().accent)
+                this.bg(cx.theme().tokens.accent)
                     .text_color(cx.theme().accent_foreground)
             })
             .child(
@@ -143,10 +140,9 @@ impl ListDelegate for MenuDelegate {
 /// A context menu for code completions and code actions.
 pub struct CodeActionMenu {
     offset: usize,
-    state: Entity<InputState>,
+    state: WeakEntity<EditorState>,
     list: Entity<ListState<MenuDelegate>>,
     open: bool,
-    bounds: Bounds<Pixels>,
 
     _subscriptions: Vec<Subscription>,
 }
@@ -154,9 +150,9 @@ pub struct CodeActionMenu {
 impl CodeActionMenu {
     /// Creates a new `CompletionMenu` with the given offset and completion items.
     ///
-    /// NOTE: This element should not call from InputState::new, unless that will stack overflow.
+    /// NOTE: This element should not call from EditorState::new, unless that will stack overflow.
     pub(crate) fn new(
-        state: Entity<InputState>,
+        state: Entity<EditorState>,
         window: &mut Window,
         cx: &mut App,
     ) -> Entity<Self> {
@@ -185,10 +181,9 @@ impl CodeActionMenu {
 
             Self {
                 offset: 0,
-                state,
+                state: state.downgrade(),
                 list,
                 open: false,
-                bounds: Bounds::default(),
                 _subscriptions,
             }
         })
@@ -221,7 +216,7 @@ impl CodeActionMenu {
         }
 
         cx.propagate();
-        if action.partial_eq(&input::Enter { secondary: false }) {
+        if input::Enter::is_primary(&*action) {
             self.on_action_enter(window, cx);
         } else if action.partial_eq(&input::Escape) {
             self.on_action_escape(window, cx);
@@ -259,13 +254,14 @@ impl CodeActionMenu {
         });
     }
 
-    pub(crate) fn is_open(&self) -> bool {
-        self.open
-    }
-
     /// Hide the completion menu and reset the trigger start offset.
     pub(crate) fn hide(&mut self, cx: &mut Context<Self>) {
         self.open = false;
+        let state = self.state.clone();
+        cx.spawn(async move |_, cx| {
+            let _ = state.update(cx, |state, cx| state.dismiss_code_action_overlay(cx));
+        })
+        .detach();
         cx.notify();
     }
 
@@ -286,27 +282,10 @@ impl CodeActionMenu {
 
         cx.notify();
     }
-
-    fn origin(&self, cx: &App) -> Option<Point<Pixels>> {
-        let state = self.state.read(cx);
-        let Some(last_layout) = state.last_layout.as_ref() else {
-            return None;
-        };
-        let Some(cursor_origin) = last_layout.cursor_bounds.map(|b| b.origin) else {
-            return None;
-        };
-
-        let scroll_origin = self.state.read(cx).scroll_handle.offset();
-
-        Some(
-            scroll_origin + cursor_origin - state.input_bounds.origin
-                + Point::new(-px(4.), last_layout.line_height + px(4.)),
-        )
-    }
 }
 
 impl Render for CodeActionMenu {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if !self.open {
             return Empty.into_any_element();
         }
@@ -316,34 +295,39 @@ impl Render for CodeActionMenu {
             return Empty.into_any_element();
         }
 
-        let view = cx.entity();
+        // The anchor is resolved in the popup's deferred prepaint from the
+        // input's current-frame geometry; the content below is built there.
+        let list = self.list.clone();
+        let menu = cx.weak_entity();
 
-        let Some(pos) = self.origin(cx) else {
-            return Empty.into_any_element();
-        };
+        deferred(CaretAnchoredPopup::new(
+            self.state.clone(),
+            move |anchor, window, cx| {
+                let max_width = MAX_MENU_WIDTH.min(window.bounds().size.width - anchor.x);
 
-        let max_width = MAX_MENU_WIDTH.min(window.bounds().size.width - pos.x);
-
-        deferred(
-            editor_popover("code-action-menu", cx)
-                .absolute()
-                .left(pos.x)
-                .top(pos.y)
-                .max_w(max_width)
-                .min_w(px(120.))
-                .child(List::new(&self.list).max_h(MAX_MENU_HEIGHT))
-                .child(
-                    canvas(
-                        move |bounds, _, cx| view.update(cx, |r, _| r.bounds = bounds),
-                        |_, _, _, _| {},
+                // A flex root measures to its contents; a block root would
+                // stretch its outside-click hitbox across the viewport.
+                div()
+                    .flex()
+                    .child(
+                        editor_popover("code-action-menu", cx)
+                            .test_support()
+                            .max_w(max_width)
+                            .min_w(px(120.))
+                            .child(List::new(&list).max_h(MAX_MENU_HEIGHT)),
                     )
-                    .absolute()
-                    .size_full(),
-                )
-                .on_mouse_down_out(cx.listener(|this, _, _, cx| {
-                    this.hide(cx);
-                })),
-        )
+                    .on_mouse_down_out({
+                        let menu = menu.clone();
+                        move |_, _, cx: &mut App| {
+                            if let Some(menu) = menu.upgrade() {
+                                menu.update(cx, |menu, cx| menu.hide(cx));
+                            }
+                        }
+                    })
+                    .into_any_element()
+            },
+        ))
+        .with_priority(gpui_base::POPUP_PRIORITY)
         .into_any_element()
     }
 }
