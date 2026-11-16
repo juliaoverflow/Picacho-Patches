@@ -59,9 +59,12 @@ impl PlatformAtlas for MetalAtlas {
 
     fn remove(&self, key: &AtlasKey) {
         let mut lock = self.0.lock();
-        let Some(id) = lock.tiles_by_key.get(key).map(|v| v.texture_id) else {
+        // The key goes whether or not its texture stays: a second removal
+        // must not count the tile again.
+        let Some(tile) = lock.tiles_by_key.remove(key) else {
             return;
         };
+        let id = tile.texture_id;
 
         let textures = match id.kind {
             AtlasTextureKind::Monochrome => &mut lock.monochrome_textures,
@@ -77,11 +80,13 @@ impl PlatformAtlas for MetalAtlas {
         };
 
         if let Some(mut texture) = texture_slot.take() {
+            // Give the tile's space back, so a texture that also holds
+            // long-lived tiles can take new ones in its place.
+            texture.allocator.deallocate(tile.tile_id.into());
             texture.decrement_ref_count();
 
             if texture.is_unreferenced() {
                 textures.free_list.push(id.index as usize);
-                lock.tiles_by_key.remove(key);
             } else {
                 *texture_slot = Some(texture);
             }

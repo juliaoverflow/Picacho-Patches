@@ -22,6 +22,21 @@ that of the latest key press or mouse button (`SerialTracker::latest` in
 
 Remove when upstream uses the latest input serial for selections.
 
+### 0002 Removed images give their atlas space back
+
+`remove` in `src/platform/blade/blade_atlas.rs`,
+`src/platform/mac/metal_atlas.rs` and
+`src/platform/windows/directx_atlas.rs`. Upstream only counted a removed
+tile out of its texture and freed the texture once nothing was left in it;
+the tile's space was never returned to the texture's allocator. A texture
+that also held images kept for good (avatars, emoji, icons) so lost the
+space of every image ever dropped from it, and new images took new
+textures: memory grew with every email Picacho's reader showed. The tile
+is now deallocated. On Metal the key was also kept while its texture stayed,
+so removing it again counted the tile out twice; it is now always removed.
+
+Remove when upstream deallocates removed atlas tiles.
+
 ## Upgrading
 
 ```sh
