@@ -1,0 +1,6 @@
+# gpui-mobile is built from a Git commit: its crates.io release (0.1.0) only
+# reserves the name. To upgrade, change `commit` and run
+# `scripts/vendor.sh rebuild gpui-mobile`.
+url=https://github.com/itsbalamurali/gpui-mobile
+commit=5fd54f4554263ae06753e90472c7f2e2ff5d7495
+paths=Cargo.toml src LICENSE-APACHE LICENSE-GPL LICENSE-AGPL README.md

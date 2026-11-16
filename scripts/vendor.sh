@@ -2,14 +2,16 @@
 # Maintains the patched crates in this repository.
 #
 # Each top-level folder holds one crate: `crate/` is the crates.io release
-# with the folder's `patches/*.patch` applied in order. This script checks
+# with the folder's `patches/*.patch` applied in order. A folder with an
+# UPSTREAM file takes its crate from a Git commit instead (see upstream_*). This script checks
 # that this still holds, rebuilds `crate/` (to upgrade to a new release), and
 # records edits made in `crate/` as a new patch.
 #
 #   scripts/vendor.sh add <crate> <ver>       start a folder from a release
 #   scripts/vendor.sh check [crate...]        crate/ equals its release + patches
 #   scripts/vendor.sh rebuild <crate> [ver]   rebuild crate/ from release ver
-#                                             (default: the current one)
+#                                             (default: the current one; a
+#                                             Git crate uses its UPSTREAM)
 #   scripts/vendor.sh save <crate> <name> [description...]
 #                                             record crate/'s edits since the
 #                                             last patch as patches/NNNN-<name>.patch
@@ -80,13 +82,48 @@ fetch() {
     echo "$file"
 }
 
-# Extracts name@version into dest and applies the folder's patches.
-# With keep_rejects set, a patch that doesn't apply leaves .rej files.
+# A value from a folder's UPSTREAM file (`key=value` lines; `#` comments).
+upstream_value() {
+    sed -n "s/^$2=//p" "$ROOT/$1/UPSTREAM" | head -n 1
+}
+
+# Downloads the UPSTREAM commit's listed paths (once) and prints the path
+# of their tar archive. UPSTREAM names `url`, `commit` (a full hash) and
+# `paths` (space-separated, relative to the repository root).
+fetch_upstream() {
+    local name="$1" url commit paths file work
+    url="$(upstream_value "$name" url)"
+    commit="$(upstream_value "$name" commit)"
+    paths="$(upstream_value "$name" paths)"
+    [ -n "$url" ] && [ -n "$commit" ] && [ -n "$paths" ] || die "$name/UPSTREAM needs url, commit and paths"
+    echo "$commit" | grep -Eq '^[0-9a-f]{40}$' || die "$name/UPSTREAM: commit must be a full hash"
+    file="$CACHE/$name-$commit.tar"
+    if [ ! -f "$file" ]; then
+        mkdir -p "$CACHE"
+        work="$(mktemp -d)"
+        git -C "$work" init -q
+        git -C "$work" fetch -q --depth 1 "$url" "$commit" || { rm -rf "$work"; die "cannot fetch $commit from $url"; }
+        # shellcheck disable=SC2086 # paths is a list
+        git -C "$work" archive --format=tar -o "$file.part" "$commit" -- $paths
+        rm -rf "$work"
+        mv "$file.part" "$file"
+    fi
+    echo "$file"
+}
+
+# Extracts name@version (or its UPSTREAM commit) into dest and applies the
+# folder's patches. With keep_rejects set, a patch that doesn't apply
+# leaves .rej files.
 build() {
     local name="$1" version="$2" dest="$3" keep_rejects="${4:-}" file patch
-    file="$(fetch "$name" "$version")"
     mkdir -p "$dest"
-    tar -xzf "$file" -C "$dest" --strip-components 1
+    if [ -f "$ROOT/$name/UPSTREAM" ]; then
+        file="$(fetch_upstream "$name")"
+        tar -xf "$file" -C "$dest"
+    else
+        file="$(fetch "$name" "$version")"
+        tar -xzf "$file" -C "$dest" --strip-components 1
+    fi
     for patch in "$ROOT/$name"/patches/*.patch; do
         [ -e "$patch" ] || continue
         if ! (cd "$dest" && git apply --whitespace=nowarn "$patch" 2>/dev/null); then
