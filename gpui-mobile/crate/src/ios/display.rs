@@ -95,4 +95,10 @@ impl PlatformDisplay for IosDisplay {
             size: size(px(bounds.width as f32), px(bounds.height as f32)),
         }
     }
+
+    fn refresh_interval(&self) -> Option<std::time::Duration> {
+        // ProMotion screens report 120; frames follow CADisplayLink either way.
+        let fps: isize = unsafe { msg_send![self.screen, maximumFramesPerSecond] };
+        (fps > 0).then(|| std::time::Duration::from_secs_f64(1.0 / fps as f64))
+    }
 }

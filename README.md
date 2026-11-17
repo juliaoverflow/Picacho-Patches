@@ -9,7 +9,7 @@ which crates.io doesn't carry, as a Git dependency).
 | [blitz-dom](blitz-dom) 0.3.0-beta.4 | Unresolvable URLs don't panic; tables restacked for narrow screens; legacy table attributes |
 | [blitz-paint](blitz-paint) 0.3.0-beta.4 | Inline gradient backgrounds |
 | [gpui-component](gpui-component) 0.9.1 | Window resize edges over the content |
-| [gpui-mobile](gpui-mobile) `5fd54f4` | Builds against gpui-pre 0.3.12 |
+| [gpui-mobile](gpui-mobile) `5fd54f4` | Builds against gpui-pre 0.3.12 (Android and iOS) |
 | [imap-proto](imap-proto) 0.10.2 | Gmail FETCH attributes; unmodeled untagged data; builds as a patched dependency; extension data (thread/email ids, PREVIEW, SAVEDATE, BINARY, ESEARCH, SORT, THREAD, VANISHED) |
 | [stylo_derive](stylo_derive) 0.22.0 | ToCss explicit error type |
 

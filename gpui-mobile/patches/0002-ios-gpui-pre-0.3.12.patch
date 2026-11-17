@@ -1,0 +1,122 @@
+Build iOS against gpui-pre 0.3.12: report the platform and the screen's refresh interval, accept display-change callbacks, use gpui-pre-wgpu's wgpu 30 and its new context signature, treat GPU specs as optional, and gate the camera and video player views behind their features.
+
+diff --git a/Cargo.toml b/Cargo.toml
+index 4321190..78235b6 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -80,7 +80,8 @@ block2              = "0.6"
+ 
+ # wgpu renderer (Metal backend on iOS/Android)
+ gpui_wgpu = { package = "gpui-pre-wgpu", version = "=0.3.12", features = ["font-kit"] }
+-wgpu = "29.0.4"
++# The same wgpu as gpui-pre-wgpu, whose context takes this crate's instance and surface.
++wgpu = "30.0.1"
+ 
+ # Text / font stack
+ pathfinder_geometry = "0.5"
+diff --git a/src/ios/display.rs b/src/ios/display.rs
+index 26e8442..6e7a5d5 100644
+--- a/src/ios/display.rs
++++ b/src/ios/display.rs
+@@ -95,4 +95,10 @@ impl PlatformDisplay for IosDisplay {
+             size: size(px(bounds.width as f32), px(bounds.height as f32)),
+         }
+     }
++
++    fn refresh_interval(&self) -> Option<std::time::Duration> {
++        // ProMotion screens report 120; frames follow CADisplayLink either way.
++        let fps: isize = unsafe { msg_send![self.screen, maximumFramesPerSecond] };
++        (fps > 0).then(|| std::time::Duration::from_secs_f64(1.0 / fps as f64))
++    }
+ }
+diff --git a/src/ios/platform.rs b/src/ios/platform.rs
+index 0582c73..aa8bdf1 100644
+--- a/src/ios/platform.rs
++++ b/src/ios/platform.rs
+@@ -76,6 +76,17 @@ impl PlatformKeyboardLayout for IosKeyboardLayout {
+ }
+ 
+ impl Platform for IosPlatform {
++    fn platform_info(&self) -> gpui::PlatformInfo {
++        gpui::PlatformInfo {
++            os: gpui::OperatingSystem::Ios,
++            target: gpui::PlatformTarget::Native,
++        }
++    }
++
++    fn on_displays_changed(&self, _callback: Box<dyn FnMut()>) {
++        // The app's window stays on the device's screen.
++    }
++
+     fn background_executor(&self) -> BackgroundExecutor {
+         self.0.lock().background_executor.clone()
+     }
+diff --git a/src/ios/platform_view.rs b/src/ios/platform_view.rs
+index 71124b1..1724c31 100644
+--- a/src/ios/platform_view.rs
++++ b/src/ios/platform_view.rs
+@@ -130,6 +130,7 @@ impl IosPlatformView {
+ 
+     /// Create a UIView with an AVPlayerLayer for video playback.
+     #[cfg(target_os = "ios")]
++    #[cfg_attr(not(feature = "video_player"), allow(unused_variables))]
+     unsafe fn create_video_player_view(
+         frame: ObjcCGRect,
+         params: &PlatformViewParams,
+@@ -146,6 +147,7 @@ impl IosPlatformView {
+         let _: () = msg_send![view, setBackgroundColor: black_color];
+ 
+         // If a player_id is provided, try to get the AVPlayer and create AVPlayerLayer
++        #[cfg(feature = "video_player")]
+         if let Some(player_id_str) = params.creation_params.get("player_id") {
+             if let Ok(player_id) = player_id_str.parse::<u32>() {
+                 // Get AVPlayer from the video_player package's PLAYERS map
+@@ -225,6 +227,7 @@ impl IosPlatformView {
+ 
+     /// Create a UIView with AVCaptureVideoPreviewLayer for camera preview.
+     #[cfg(target_os = "ios")]
++    #[cfg_attr(not(feature = "camera"), allow(unused_variables))]
+     unsafe fn create_camera_preview_view(
+         frame: ObjcCGRect,
+         params: &PlatformViewParams,
+@@ -240,6 +243,7 @@ impl IosPlatformView {
+         let _: () = msg_send![view, setBackgroundColor: black_color];
+ 
+         // If a session_id is provided, try to get the AVCaptureSession and create preview layer
++        #[cfg(feature = "camera")]
+         if let Some(session_id_str) = params.creation_params.get("session_id") {
+             if let Ok(session_id) = session_id_str.parse::<usize>() {
+                 if let Some(session_ptr) = crate::packages::camera::ios_get_session(session_id) {
+diff --git a/src/ios/window.rs b/src/ios/window.rs
+index 709d659..24157f9 100644
+--- a/src/ios/window.rs
++++ b/src/ios/window.rs
+@@ -768,7 +768,7 @@ impl IosWindow {
+ 
+             let surface_result = metal_instance.create_surface_unsafe(target);
+             match surface_result {
+-                Ok(surface) => match WgpuContext::new(metal_instance, &surface, None) {
++                Ok(surface) => match WgpuContext::new(metal_instance, &surface, &config, None) {
+                     Ok(context) => {
+                         // Pre-populate gpu_context so WgpuRenderer::new()
+                         // reuses our Metal-backed context (and its instance)
+@@ -1325,6 +1325,10 @@ impl HasDisplayHandle for IosWindow {
+ }
+ 
+ impl PlatformWindow for IosWindow {
++    fn on_display_changed(&self, _callback: Box<dyn FnMut()>) {
++        // The window stays on the device's screen.
++    }
++
+     fn bounds(&self) -> Bounds<Pixels> {
+         self.bounds.get()
+     }
+@@ -1593,7 +1597,7 @@ impl PlatformWindow for IosWindow {
+ 
+     fn gpu_specs(&self) -> Option<GpuSpecs> {
+         let guard = self.renderer.lock();
+-        guard.as_ref().map(|r| r.gpu_specs())
++        guard.as_ref().and_then(|r| r.gpu_specs())
+     }
+ 
+     fn update_ime_position(&self, _bounds: Bounds<Pixels>) {
