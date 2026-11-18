@@ -1,0 +1,99 @@
+Hit testing an inline root's boxes and text where they are painted.
+
+diff --git a/src/document.rs b/src/document.rs
+index e41dc0c..b8fd12c 100644
+--- a/src/document.rs
++++ b/src/document.rs
+@@ -2507,7 +2507,20 @@ impl BaseDocument {
+         let hit = self.hit(x, y)?;
+         let hit_node = self.get_node(hit.node_id)?;
+         let inline_root = hit_node.inline_root_ancestor()?;
+-        let byte_offset = inline_root.text_offset_at_point(hit.x, hit.y)?;
++        // A text hit is in its inline root's content-box coordinates already;
++        // a box inside the inline root (an image, say) reports its own.
++        let (x, y) = if hit.is_text || hit.node_id == inline_root.id {
++            (hit.x, hit.y)
++        } else {
++            let node = hit_node.absolute_position(0.0, 0.0);
++            let root = inline_root.absolute_position(0.0, 0.0);
++            let layout = inline_root.final_layout();
++            (
++                hit.x + node.x - root.x - layout.padding.left - layout.border.left,
++                hit.y + node.y - root.y - layout.padding.top - layout.border.top,
++            )
++        };
++        let byte_offset = inline_root.text_offset_at_point(x, y)?;
+         Some((inline_root.id, byte_offset))
+     }
+ 
+diff --git a/src/node/node.rs b/src/node/node.rs
+index 66190f4..7c98c11 100644
+--- a/src/node/node.rs
++++ b/src/node/node.rs
+@@ -1452,14 +1452,18 @@ impl Node {
+             *scrollbar = Some(sb);
+         }
+ 
++        // Children (inline boxes, floats, positioned boxes) are laid out
++        // relative to this node's border box, as they are painted. Only the
++        // inline root's own text is laid out relative to its content box.
+         let content_box_offset = taffy::Point {
+             x: self.final_layout().padding.left + self.final_layout().border.left,
+             y: self.final_layout().padding.top + self.final_layout().border.top,
+         };
+-        if self.flags.is_inline_root() {
+-            x -= content_box_offset.x;
+-            y -= content_box_offset.y;
+-        }
++        let (content_x, content_y) = if self.flags.is_inline_root() {
++            (x - content_box_offset.x, y - content_box_offset.y)
++        } else {
++            (x, y)
++        };
+ 
+         // Positive z_index hoisted children
+         if matches_hoisted_content {
+@@ -1485,12 +1489,6 @@ impl Node {
+             let mut child_x = x;
+             let mut child_y = y;
+             if child_position.is_out_of_flow() {
+-                // Out-of-flow children's layout location is relative to this node's
+-                // border box, so undo the inline-root content-box offset applied above
+-                if self.flags.is_inline_root() {
+-                    child_x += content_box_offset.x;
+-                    child_y += content_box_offset.y;
+-                }
+                 // Fixed-position children of the root element are positioned
+                 // against the viewport and do not scroll with it. (A fixed box
+                 // whose containing block is a transformed ancestor scrolls with
+@@ -1531,10 +1529,11 @@ impl Node {
+             if let Some(ild) = element_data.inline_layout_data.as_ref() {
+                 let layout = &ild.layout;
+                 let scale = layout.scale();
+-                let y = y - ild.block_offset;
++                let (x, y) = (content_x, content_y);
++                let line_y = y - ild.block_offset;
+ 
+                 if let Some((cluster, _side)) =
+-                    Cluster::from_point_exact(layout, x * scale, y * scale)
++                    Cluster::from_point_exact(layout, x * scale, line_y * scale)
+                 {
+                     let node_id = cluster.style().brush.id;
+                     let text_pointer_events_none = self
+@@ -1553,12 +1552,13 @@ impl Node {
+             }
+         }
+ 
+-        // Self (this node)
++        // Self (this node). An inline root reports content-box coordinates,
++        // as its text is laid out (see `text_offset_at_point`).
+         if matches_self && !pointer_events_none {
+             return Some(HitResult {
+                 node_id: self.id,
+-                x,
+-                y,
++                x: content_x,
++                y: content_y,
+                 is_text: false,
+             });
+         }

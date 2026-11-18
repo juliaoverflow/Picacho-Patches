@@ -6,7 +6,7 @@ which crates.io doesn't carry, as a Git dependency).
 
 | Software | Patches |
 | --- | --- |
-| [blitz-dom](blitz-dom) 0.3.0-beta.4 | Unresolvable URLs don't panic; tables restacked for narrow screens; legacy table attributes |
+| [blitz-dom](blitz-dom) 0.3.0-beta.4 | Unresolvable URLs don't panic; tables restacked for narrow screens; legacy table attributes; text selection hit where it is painted |
 | [blitz-paint](blitz-paint) 0.3.0-beta.4 | Inline gradient backgrounds |
 | [gpui-component](gpui-component) 0.9.1 | Window resize edges over the content |
 | [gpui-mobile](gpui-mobile) `5fd54f4` | Builds against gpui-pre 0.3.12 (Android and iOS) |
