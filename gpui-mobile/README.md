@@ -40,6 +40,20 @@ so the crate builds for iOS with default features off.
 
 Remove when upstream builds against the gpui-pre release Picacho uses.
 
+### 0003 Pinch
+
+`src/pinch.rs` (new), `src/lib.rs`, `src/android/window.rs` and
+`src/ios/window.rs`. GPUI's portable touch recognizer (gpui-pre 0.3.12) has
+no pinch and ignores a second finger, so two fingers zoomed nothing. Raw
+contacts now pass through `PinchRecognizer` on their way to it: one finger
+goes on untouched; when a second lands the first is cancelled in GPUI, and
+the two surface as `PinchEvent`s (`on_pinch`, as a trackpad's pinch on a
+desktop) at their midpoint, each step's `delta` how much the distance
+between them grew; lifting either ends it. Fingers left after a pinch, and
+a third, are ignored until every finger has lifted.
+
+Remove when GPUI's recognizer recognizes pinches.
+
 ## Upgrading
 
 Change `commit` in `UPSTREAM`, then:

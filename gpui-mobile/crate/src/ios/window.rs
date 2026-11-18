@@ -593,6 +593,8 @@ pub(crate) struct IosWindow {
     active_touches: RefCell<HashMap<usize, gpui::TouchId>>,
     next_touch_id: Cell<u64>,
     fling_guard: RefCell<FlingGuard>,
+    /// Turns two fingers into pinches, which GPUI's recognizer lacks.
+    pinch: RefCell<crate::pinch::PinchRecognizer>,
     /// The wgpu renderer (Metal backend on iOS).
     /// Wrapped in a `Mutex<Option<…>>` so that `draw()` (called from the
     /// `request_frame` callback) can acquire a mutable reference without
@@ -726,6 +728,7 @@ impl IosWindow {
                 active_touches: RefCell::new(HashMap::new()),
                 next_touch_id: Cell::new(0),
                 fling_guard: RefCell::new(FlingGuard::new()),
+                pinch: RefCell::new(crate::pinch::PinchRecognizer::new()),
                 renderer: Mutex::new(None),
             };
 
@@ -907,7 +910,8 @@ impl IosWindow {
 
     /// Forward raw contacts to GPUI's gesture recognizer. It owns tap synthesis,
     /// long press, claimed control drags, pan scrolling, and scroll momentum;
-    /// [`FlingGuard`] keeps a contact that stops a fling from inheriting its axis.
+    /// [`FlingGuard`] keeps a contact that stops a fling from inheriting its axis,
+    /// and [`crate::pinch::PinchRecognizer`] turns two fingers into pinches.
     pub fn handle_touch(&self, touch: *mut AnyObject, _event: *mut AnyObject) {
         let position = touch_location_in_view(touch, self.view);
         let phase = match touch_phase(touch) {
@@ -944,13 +948,22 @@ impl IosWindow {
                 predicted_position: None,
                 force: None,
             };
-            self.fling_guard.borrow_mut().relay(
-                event,
-                || self.next_touch_id(),
-                |event| {
-                    callback(PlatformInput::Touch(event));
-                },
-            );
+            for relay in self.pinch.borrow_mut().handle(event) {
+                match relay {
+                    crate::pinch::Relay::Touch(event) => {
+                        self.fling_guard.borrow_mut().relay(
+                            event,
+                            || self.next_touch_id(),
+                            |event| {
+                                callback(PlatformInput::Touch(event));
+                            },
+                        );
+                    }
+                    crate::pinch::Relay::Pinch(event) => {
+                        callback(PlatformInput::Pinch(event));
+                    }
+                }
+            }
         }
         if matches!(phase, gpui::TouchPhase::Ended | gpui::TouchPhase::Cancelled) {
             self.active_touches.borrow_mut().remove(&key);
