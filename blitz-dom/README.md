@@ -49,6 +49,23 @@ apart, with seams of the page between them.
 
 Remove when upstream supports these attributes.
 
+### 0004 Selection hits
+
+`Node::hit_inner` in `src/node/node.rs` and `find_text_position` in
+`src/document.rs`. An inline root's children (inline blocks, images, floats)
+are laid out and painted relative to its border box, but upstream hit-tested
+them relative to its content box: a pointer reached them shifted right and
+down by the inline root's padding and border. Responsive emails put their
+columns in inline blocks inside padded cells, so a selection began and ended
+well to the right of the pointer, and links there were clicked off target.
+Its text hit also took the line box's vertical offset away twice, so text in
+a vertically centered cell was selected a line or more away. A press on a box
+inside an inline root (an image) now finds the text position in the inline
+root's coordinates rather than the box's.
+
+Remove when upstream hit-tests inline roots' children against their border
+box.
+
 ## Upgrading
 
 ```sh

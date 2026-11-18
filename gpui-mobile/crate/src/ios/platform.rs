@@ -76,6 +76,17 @@ impl PlatformKeyboardLayout for IosKeyboardLayout {
 }
 
 impl Platform for IosPlatform {
+    fn platform_info(&self) -> gpui::PlatformInfo {
+        gpui::PlatformInfo {
+            os: gpui::OperatingSystem::Ios,
+            target: gpui::PlatformTarget::Native,
+        }
+    }
+
+    fn on_displays_changed(&self, _callback: Box<dyn FnMut()>) {
+        // The app's window stays on the device's screen.
+    }
+
     fn background_executor(&self) -> BackgroundExecutor {
         self.0.lock().background_executor.clone()
     }

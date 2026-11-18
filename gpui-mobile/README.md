@@ -8,7 +8,7 @@ AGPL-3.0, in `crate/`). Copyright belongs to Balamurali Pandranki and the
 gpui-mobile authors.
 
 `crate/` is that commit's `Cargo.toml`, `src`, licenses and README with
-`patches/` applied in order. Picacho uses it on Android only.
+`patches/` applied in order. Picacho uses it on Android and iOS.
 
 ## Patches
 
@@ -22,6 +22,21 @@ refresh interval (frames follow Choreographer), display-change callbacks
 are accepted and never called (an activity keeps its display), frame
 requests fill the new timing fields with their defaults, and the
 renderer's GPU specs are optional.
+
+Remove when upstream builds against the gpui-pre release Picacho uses.
+
+### 0002 iOS on gpui-pre 0.3.12
+
+`Cargo.toml`, `src/ios/display.rs`, `src/ios/platform.rs`,
+`src/ios/platform_view.rs` and `src/ios/window.rs`. 0001's changes for
+iOS: the platform reports itself (`platform_info`: iOS, native), displays
+report the screen's refresh interval (`maximumFramesPerSecond`),
+display-change callbacks are accepted and never called, and the renderer's
+GPU specs are optional. iOS now uses wgpu 30, the version gpui-pre-wgpu
+0.3.12 builds its context from, and passes the surface configuration
+`WgpuContext::new` now takes. The camera preview and video player views
+reach their packages only with the `camera` and `video_player` features,
+so the crate builds for iOS with default features off.
 
 Remove when upstream builds against the gpui-pre release Picacho uses.
 

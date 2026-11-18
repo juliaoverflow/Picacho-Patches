@@ -2507,7 +2507,20 @@ impl BaseDocument {
         let hit = self.hit(x, y)?;
         let hit_node = self.get_node(hit.node_id)?;
         let inline_root = hit_node.inline_root_ancestor()?;
-        let byte_offset = inline_root.text_offset_at_point(hit.x, hit.y)?;
+        // A text hit is in its inline root's content-box coordinates already;
+        // a box inside the inline root (an image, say) reports its own.
+        let (x, y) = if hit.is_text || hit.node_id == inline_root.id {
+            (hit.x, hit.y)
+        } else {
+            let node = hit_node.absolute_position(0.0, 0.0);
+            let root = inline_root.absolute_position(0.0, 0.0);
+            let layout = inline_root.final_layout();
+            (
+                hit.x + node.x - root.x - layout.padding.left - layout.border.left,
+                hit.y + node.y - root.y - layout.padding.top - layout.border.top,
+            )
+        };
+        let byte_offset = inline_root.text_offset_at_point(x, y)?;
         Some((inline_root.id, byte_offset))
     }
 
