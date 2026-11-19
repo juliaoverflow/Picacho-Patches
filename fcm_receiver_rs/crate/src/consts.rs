@@ -32,6 +32,24 @@ pub const K_DATA_MESSAGE_STANZA_TAG: u8 = 8;
 pub const K_BATCH_PRESENCE_STANZA_TAG: u8 = 9;
 pub const K_STREAM_ERROR_STANZA_TAG: u8 = 10;
 
+/// IqStanza extension ids the client sends to acknowledge what it received
+/// (Chromium's `mcs_client.cc`): a selective ack names persistent ids; a
+/// stream ack acknowledges everything up to its `last_stream_id_received`.
+pub const K_SELECTIVE_ACK_EXTENSION: i32 = 12;
+pub const K_STREAM_ACK_EXTENSION: i32 = 13;
+
+/// How many received persistent ids are kept for acknowledging at login. The
+/// server holds at most 100 undelivered messages for a device.
+pub const MAX_PENDING_PERSISTENT_IDS: usize = 200;
+/// How many recently handled persistent ids are remembered, to drop
+/// redeliveries.
+pub const MAX_RECENT_PERSISTENT_IDS: usize = 1000;
+/// How long a socket read waits before the client looks at its heartbeat.
+pub const SOCKET_READ_TICK_SECS: u64 = 30;
+/// How long the client waits for anything after a heartbeat ping before it
+/// takes the connection for dead.
+pub const HEARTBEAT_TIMEOUT_SECS: u64 = 60;
+
 pub const FCM_SERVER_KEY: [u8; 65] = [
     4, 51, 148, 247, 223, 161, 235, 177, 220, 3, 162, 94, 21, 113, 219, 72, 211, 46, 237, 237, 178,
     52, 219, 183, 71, 58, 12, 143, 196, 204, 225, 111, 60, 140, 132, 223, 171, 182, 102, 62, 242,

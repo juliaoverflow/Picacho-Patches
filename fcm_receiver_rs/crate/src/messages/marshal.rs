@@ -378,9 +378,8 @@ pub fn marshal_extension(msg: &ManualExtension) -> Result<Vec<u8>> {
     if let Some(id) = msg.id {
         encoder.encode_int32(1, id);
     }
-    if !msg.data.is_empty() {
-        encoder.encode_bytes(2, &msg.data);
-    }
+    // Required in mcs.proto, even when empty (a stream ack's).
+    encoder.encode_bytes(2, &msg.data);
     Ok(encoder.into_bytes())
 }
 
@@ -441,6 +440,14 @@ pub fn marshal_iq_stanza(msg: &ManualIqStanza) -> Result<Vec<u8>> {
     }
     if let Some(status) = msg.status {
         encoder.encode_int64(13, status);
+    }
+    Ok(encoder.into_bytes())
+}
+
+pub fn marshal_selective_ack(msg: &ManualSelectiveAck) -> Result<Vec<u8>> {
+    let mut encoder = ProtoEncoder::new();
+    for id in &msg.id {
+        encoder.encode_string(1, id);
     }
     Ok(encoder.into_bytes())
 }
