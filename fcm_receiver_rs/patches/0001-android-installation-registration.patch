@@ -1,0 +1,100 @@
+Register Android messaging tokens against their Firebase installation.
+
+diff --git a/src/client.rs b/src/client.rs
+index d521728..34d4251 100644
+--- a/src/client.rs
++++ b/src/client.rs
+@@ -152,17 +152,17 @@ impl FcmClient {
+         }
+ 
+         if self.gcm_token.is_none() && self.android_app.is_none() {
+-            let token = self.register_request_gcm()?;
++            let token = self.register_request_gcm(None)?;
+             self.gcm_token = Some(token);
+-        } else if self.gcm_token.is_none() {
+-            let token = self.register_request_gcm()?;
+-            self.fcm_token = Some(token);
+         }
+ 
+-        let install_token = self.install_request()?;
++        let (fid, install_token) = self.install_request()?;
+         self.installation_auth_token = Some(install_token);
+ 
+-        if self.android_app.is_none() {
++        if self.android_app.is_some() {
++            let token = self.register_request_gcm(Some(fid))?;
++            self.fcm_token = Some(token);
++        } else {
+             let token = self.register_request()?;
+             self.fcm_token = Some(token);
+         }
+@@ -188,7 +188,7 @@ impl FcmClient {
+         Ok(())
+     }
+ 
+-    fn register_request_gcm(&mut self) -> Result<String> {
++    fn register_request_gcm(&mut self, fid: Option<String>) -> Result<String> {
+         let android_app = self.android_app.as_ref().map(|app| AndroidAppOptions {
+             gcm_sender_id: app.gcm_sender_id.as_str(),
+             android_package: app.android_package.as_str(),
+@@ -204,7 +204,7 @@ impl FcmClient {
+             sender_override: None,
+             subtype_override: None,
+             delete: false,
+-            extra_params: Vec::new(),
++            extra_params: fid.into_iter().map(|id| ("X-appid".to_owned(), id)).collect(),
+         };
+ 
+         let token = http_client::send_gcm_register_request(&self.http_client, &request)?;
+@@ -216,7 +216,7 @@ impl FcmClient {
+         Ok(token)
+     }
+ 
+-    fn install_request(&mut self) -> Result<String> {
++    fn install_request(&mut self) -> Result<(String, String)> {
+         let fid = util::generate_firebase_fid()?;
+         let android_app = self.android_app.as_ref().map(|app| AndroidAppOptions {
+             gcm_sender_id: app.gcm_sender_id.as_str(),
+@@ -235,7 +235,7 @@ impl FcmClient {
+             user_agent: None,
+         };
+         let response = http_client::send_fcm_install_request(&self.http_client, &request)?;
+-        Ok(response.auth_token.token)
++        Ok((response.fid.unwrap_or(fid), response.auth_token.token))
+     }
+ 
+     fn register_request(&mut self) -> Result<String> {
+diff --git a/src/http_client.rs b/src/http_client.rs
+index 9867b26..554ad58 100644
+--- a/src/http_client.rs
++++ b/src/http_client.rs
+@@ -25,6 +25,7 @@ pub struct AuthToken {
+ 
+ #[derive(Debug, Clone, Deserialize)]
+ pub struct FcmInstallationResponse {
++    pub fid: Option<String>,
+     #[serde(rename = "authToken")]
+     pub auth_token: AuthToken,
+ }
+diff --git a/src/util.rs b/src/util.rs
+index 33d7379..017a9c6 100644
+--- a/src/util.rs
++++ b/src/util.rs
+@@ -1,5 +1,5 @@
+ use crate::error::Result;
+-use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
++use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+ use base64::Engine;
+ use rand::rngs::OsRng;
+ use rand::RngCore;
+@@ -9,7 +9,9 @@ pub fn generate_firebase_fid() -> Result<String> {
+     let mut fid = [0u8; 17];
+     OsRng.fill_bytes(&mut fid);
+     fid[0] = 0b0111_0000 | (fid[0] & 0b0000_1111);
+-    Ok(BASE64_STANDARD.encode(fid))
++    let mut encoded = URL_SAFE_NO_PAD.encode(fid);
++    encoded.truncate(22);
++    Ok(encoded)
+ }
+ 
+ pub fn contains<T: PartialEq>(items: &[T], target: &T) -> bool {

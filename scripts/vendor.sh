@@ -89,7 +89,7 @@ upstream_value() {
 
 # Downloads the UPSTREAM commit's listed paths (once) and prints the path
 # of their tar archive. UPSTREAM names `url`, `commit` (a full hash) and
-# `paths` (space-separated, relative to the repository root).
+# `paths` (space-separated, relative to the optional `subdir` or repo root).
 fetch_upstream() {
     local name="$1" url commit paths file work
     url="$(upstream_value "$name" url)"
@@ -104,7 +104,9 @@ fetch_upstream() {
         git -C "$work" init -q
         git -C "$work" fetch -q --depth 1 "$url" "$commit" || { rm -rf "$work"; die "cannot fetch $commit from $url"; }
         # shellcheck disable=SC2086 # paths is a list
-        git -C "$work" archive --format=tar -o "$file.part" "$commit" -- $paths
+        local subdir
+        subdir="$(upstream_value "$name" subdir)"
+        git -C "$work" archive --format=tar -o "$file.part" "$commit${subdir:+:$subdir}" -- $paths
         rm -rf "$work"
         mv "$file.part" "$file"
     fi
