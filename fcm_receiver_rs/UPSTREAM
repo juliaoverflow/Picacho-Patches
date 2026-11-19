@@ -1,0 +1,4 @@
+url=https://github.com/agusibrahim/fcm_receiver.rs
+commit=fc4309843e7cc8220d382b5fe09b3e7697e08d83
+subdir=fcm_receiver_rs
+paths=Cargo.toml src README.md
