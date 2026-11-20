@@ -52,6 +52,16 @@ without `IMAP4rev1`, as servers speaking only rev2 send it; `IMAP4rev2` stays
 a `Capability::Atom`. Upstream refuses such a list, so `imap` 2.4 can't read
 these servers' capabilities and the session fails.
 
+### 0006 UIDONLY
+
+`message_data_uidfetch` in `src/parser/rfc3501.rs`: once a client enables
+UIDONLY (RFC 9586), the server sends `* <uid> UIDFETCH (...)` in place of
+FETCH, numbered by UID, whose attributes may leave the UID out. It is
+reported as `Response::Fetch(uid, …)` with `AttributeValue::Uid(uid)` added
+where missing, so `imap` 2.4's `uid_fetch` and `uid_store` read it as a UID
+FETCH reply (and pass it over as unilateral data elsewhere). Without it,
+`imap` takes the response for the server hanging up.
+
 Remove these patches when Picacho moves to an `imap`/`imap-proto` release that
 parses this data.
 
