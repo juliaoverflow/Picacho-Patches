@@ -164,8 +164,13 @@ named!(capability<Capability>, alt!(
     map!(atom, |a| Capability::Atom(a))
 ));
 
+// A server may speak IMAP4rev2 alone (RFC 9051), listing it as an atom.
 fn ensure_capabilities_contains_imap4rev<'a>(capabilities: Vec<Capability<'a>>) -> Result<Vec<Capability<'a>>, ()> {
-    if capabilities.contains(&Capability::Imap4rev1) {
+    let rev2 = capabilities.iter().any(|c| match c {
+        Capability::Atom(a) => a.eq_ignore_ascii_case("IMAP4rev2"),
+        _ => false,
+    });
+    if rev2 || capabilities.contains(&Capability::Imap4rev1) {
         Ok(capabilities)
     } else {
         Err(())
@@ -871,10 +876,18 @@ mod tests {
             }
         );
 
-        // Capability command must contain IMAP4rev1
+        // Capability command must contain IMAP4rev1 or IMAP4rev2
         assert_matches!(
             super::capability_data(b"CAPABILITY AUTH=GSSAPI AUTH=PLAIN\r\n"),
             Err(_)
+        );
+        assert_matches!(
+            super::capability_data(b"CAPABILITY IMAP4rev2 CONDSTORE\r\n"),
+            Ok((_, capabilities)) => {
+                assert_eq!(capabilities, vec![
+                    Capability::Atom("IMAP4rev2"), Capability::Atom("CONDSTORE")
+                ])
+            }
         );
     }
 

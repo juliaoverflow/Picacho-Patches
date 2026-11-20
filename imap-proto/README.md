@@ -45,6 +45,13 @@ Two mechanical fixes that the registry build hides with `--cap-lints`: three
   where any other unknown response would end the command as if the server
   had hung up. Sequence number 0 never names a message.
 
+### 0005 IMAP4rev2
+
+`capability_data` accepts a CAPABILITY list naming `IMAP4rev2` (RFC 9051)
+without `IMAP4rev1`, as servers speaking only rev2 send it; `IMAP4rev2` stays
+a `Capability::Atom`. Upstream refuses such a list, so `imap` 2.4 can't read
+these servers' capabilities and the session fails.
+
 Remove these patches when Picacho moves to an `imap`/`imap-proto` release that
 parses this data.
 
