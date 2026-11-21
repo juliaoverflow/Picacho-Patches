@@ -267,7 +267,11 @@ impl ElementCx<'_, '_> {
             .map(|row| {
                 [
                     row.group.and_then(background_color),
-                    background_color(row.node_id),
+                    // An anonymous row's node is its one cell, which paints
+                    // its own background.
+                    (!row.anonymous)
+                        .then(|| background_color(row.node_id))
+                        .flatten(),
                 ]
             })
             .collect();

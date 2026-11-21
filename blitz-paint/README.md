@@ -24,6 +24,16 @@ table row or row group whose top layer is a one-color gradient that color
 
 Remove when upstream paints inline background images.
 
+### 0002 Anonymous table rows
+
+`draw_table_row_backgrounds` in `src/render/background.rs`. A block directly
+in a table is laid out in an anonymous row of its own (blitz-dom's 0005),
+whose `node_id` is the block itself. Its background is the block's, painted
+as the cell's; as a row's it would be painted again behind it. Rows marked
+`anonymous` paint no row background. Needs blitz-dom's 0005.
+
+Remove with blitz-dom's 0005.
+
 ## Upgrading
 
 ```sh

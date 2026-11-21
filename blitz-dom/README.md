@@ -66,6 +66,21 @@ root's coordinates rather than the box's.
 Remove when upstream hit-tests inline roots' children against their border
 box.
 
+### 0005 Blocks in tables
+
+`collect_table_cells` in `src/layout/table.rs`. Email templates (Klaviyo's
+among them) lay columns out as `display: table-cell` divs in a
+`display: table` div, and below 480 pixels make the columns
+`display: block` to stack them. A block or inline box directly in a table or
+row group is wrapped in an anonymous row and cell in CSS. Upstream dropped it,
+so on a phone such an email showed almost nothing. Each such box now gets an
+anonymous row of its own and is laid out as its cell (`TableRow::anonymous`,
+whose `node_id` is the box), so restacked columns stack. Unlike CSS,
+consecutive such boxes each get a row rather than sharing one. blitz-paint's
+0002 depends on `TableRow::anonymous`.
+
+Remove when upstream wraps blocks in tables in anonymous rows and cells.
+
 ## Upgrading
 
 ```sh
