@@ -34,6 +34,20 @@ as the cell's; as a row's it would be painted again behind it. Rows marked
 
 Remove with blitz-dom's 0005.
 
+### 0003 SVG image layers
+
+`render_svg_image` in `src/render.rs` (used for an `<img>`'s SVG and an SVG
+background layer) and `is_image_layer` in `src/lib.rs`. A raster image is
+recorded as one image fill, but an SVG image as ordinary fills and strokes,
+which a consumer of the recorded scene couldn't tell from the document's
+own drawing. Picacho recolors the scene for dark reading and leaves images
+alone, so SVG logos were recolored and photos weren't. SVG images are now
+drawn inside an even-odd layer clipped to the image's viewport (nothing else
+pushes an even-odd layer), which `is_image_layer` recognizes. Clipping to the
+viewport is what browsers do for SVG used as an image.
+
+Remove when upstream marks image content in the scene it records.
+
 ## Upgrading
 
 ```sh

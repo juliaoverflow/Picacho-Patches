@@ -63,11 +63,13 @@ pub(crate) fn make_device(
     viewport: &Viewport,
     media_type: MediaType,
     font_ctx: Arc<Mutex<FontContext>>,
+    media_device_pixel_ratio: Option<f32>,
 ) -> Device {
     let (width, height) = viewport.logical_size();
     let viewport_size = euclid::Size2D::new(width, height);
-    let device_size = euclid::Size2D::new(width, height) * viewport.scale();
-    let device_pixel_ratio = euclid::Scale::new(viewport.scale());
+    let scale = media_device_pixel_ratio.unwrap_or(viewport.scale());
+    let device_size = euclid::Size2D::new(width, height) * scale;
+    let device_pixel_ratio = euclid::Scale::new(scale);
 
     Device::new(
         media_type,

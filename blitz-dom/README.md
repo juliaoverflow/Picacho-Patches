@@ -81,6 +81,42 @@ consecutive such boxes each get a row rather than sharing one. blitz-paint's
 
 Remove when upstream wraps blocks in tables in anonymous rows and cells.
 
+### 0006 Email legacy attributes
+
+`synthesize_presentational_hints_for_legacy_attributes` in `src/stylo.rs`.
+Email HTML is written with the presentational attributes of old HTML, which
+upstream mapped only partly:
+
+- `align` gave every element a `text-align`. On a table it centers or floats
+  the table, not its content: `align="center"` now gives it auto margins
+  (left and right float it, in the UA sheet) and its cells' text stays put.
+  On an image (and other replaced elements) left and right float it and the
+  other keywords set `vertical-align`. Keywords match case-insensitively, and
+  `justify` justifies.
+- `background` on the body and table parts is a background image.
+- `<font color size face>` and `<body text>` set the color, the legacy font
+  size (1 to 7, or relative to 3) and the font family.
+- `bgcolor` read only `#rgb` and `#rrggbb`; it now follows the legacy color
+  rules, so `bgcolor="white"` and `bgcolor="ffffff"` work too.
+
+Attribute values written into CSS are quoted, so an attribute can't add
+declarations of its own.
+
+Remove when upstream maps these attributes.
+
+### 0007 Media device pixel ratio
+
+`make_device` in `src/stylo_device.rs` and
+`BaseDocument::set_media_device_pixel_ratio` in `src/document.rs`. Picacho
+lays emails out in CSS pixels (a viewport scale of 1) and rasterizes them at
+the screen's scale itself, so `resolution` and `-webkit-device-pixel-ratio`
+media queries always saw 1, and emails' sharper images for HiDPI screens were
+never used. The new setter gives `@media` rules the ratio to see without
+changing the layout's scale; `None` keeps upstream's behavior.
+
+Remove when upstream lets the media device pixel ratio differ from the
+layout scale.
+
 ## Upgrading
 
 ```sh
