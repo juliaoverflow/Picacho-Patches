@@ -117,6 +117,17 @@ changing the layout's scale; `None` keeps upstream's behavior.
 Remove when upstream lets the media device pixel ratio differ from the
 layout scale.
 
+### 0008 Media preferences
+
+`BaseDocument::set_media_preferences` (`src/document.rs`), with
+`MediaPreferences` and `Contrast` (`src/stylo_device.rs`, exported): what
+`prefers-reduced-motion` and `prefers-contrast` media queries see (Media
+Queries 5 §11.3, §11.4), from the embedder's or the system's settings. They
+are kept on the document and applied each time the device is rebuilt, as
+0007's pixel ratio is. Needs `stylo` 0001.
+
+Remove when upstream passes these preferences to Stylo.
+
 ## Upgrading
 
 ```sh

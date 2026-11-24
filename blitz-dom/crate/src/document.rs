@@ -245,6 +245,9 @@ pub struct BaseDocument {
     /// The device pixel ratio `@media` rules see, when it isn't the
     /// viewport's scale (see [`Self::set_media_device_pixel_ratio`]).
     pub(crate) media_device_pixel_ratio: Option<f32>,
+    /// What `prefers-reduced-motion` and `prefers-contrast` see (see
+    /// [`Self::set_media_preferences`]).
+    pub(crate) media_preferences: crate::stylo_device::MediaPreferences,
     /// Strategy for Stylo's style traversal during `resolve`.
     pub(crate) style_threading: StyleThreading,
     /// Whether incremental layout is enabled for this document. When disabled,
@@ -443,7 +446,7 @@ impl BaseDocument {
 
         let viewport = config.viewport.unwrap_or_default();
         let media_type = config.media_type.unwrap_or_else(MediaType::screen);
-        let device = make_device(&viewport, media_type.clone(), font_ctx.clone(), None);
+        let device = make_device(&viewport, media_type.clone(), font_ctx.clone(), None, Default::default());
         let stylist = Stylist::new(device, QuirksMode::NoQuirks);
         let snapshots = SnapshotMap::new();
         let nodes = Box::new(NodeTree::new());
@@ -486,6 +489,7 @@ impl BaseDocument {
             media_type,
             pending_device_changes: DeviceChanges::empty(),
             media_device_pixel_ratio: None,
+            media_preferences: Default::default(),
             style_threading: config.style_threading,
             incremental_layout: config.incremental.unwrap_or(true),
             subdocument_depth: config.subdocument_depth,
@@ -2019,6 +2023,17 @@ impl BaseDocument {
         self.queue_device_changes(DeviceChanges::MEDIA_TYPE);
     }
 
+    /// Sets what `prefers-reduced-motion` and `prefers-contrast` media
+    /// queries see (Media Queries 5 §11.3, §11.4), from the embedder's
+    /// or the system's settings. The default is no preference for either.
+    pub fn set_media_preferences(&mut self, preferences: crate::stylo_device::MediaPreferences) {
+        if self.media_preferences == preferences {
+            return;
+        }
+        self.media_preferences = preferences;
+        self.queue_device_changes(DeviceChanges::MEDIA_TYPE);
+    }
+
     pub fn viewport(&self) -> &Viewport {
         &self.viewport
     }
@@ -2120,6 +2135,7 @@ impl BaseDocument {
             self.media_type.clone(),
             self.font_ctx.clone(),
             self.media_device_pixel_ratio,
+            self.media_preferences,
         ));
         self.scroll_viewport_by(0.0, 0.0); // Clamp scroll offset
 
