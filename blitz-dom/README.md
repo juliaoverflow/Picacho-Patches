@@ -128,6 +128,23 @@ are kept on the document and applied each time the device is rebuilt, as
 
 Remove when upstream passes these preferences to Stylo.
 
+### 0009 SVG images stay inside
+
+`parse_svg_image` in `src/util.rs` and `SvgImageData::from_data` in
+`src/node/svg.rs`. Upstream parsed every SVG (an `<svg>` element written in
+the document, or an SVG image) with usvg's default options, whose string
+resolver reads whatever path an `<image>` or `<feImage>` names from disk
+(`std::fs::read`), whatever `resources_dir`, past the document's net
+provider. An email could have local files shown (and printed into a PDF),
+`/dev/zero` read without end, and on Windows a UNC path
+(`\\host\share\x.png`) opened over SMB, handing that host the reader's
+NTLM hash, all with remote content blocked. Now `<image>` loads only
+pictures inside the SVG (`data:` URLs), not gzip-compressed ones, and
+`from_data` refuses gzip (SVGZ), which usvg inflated without limit: the
+embedder inflates it, within its limits, before handing it over.
+
+Keep: Picacho relies on it for mail.
+
 ## Upgrading
 
 ```sh
